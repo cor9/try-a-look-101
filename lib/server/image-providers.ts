@@ -1,6 +1,6 @@
 import "server-only";
 import OpenAI, { toFile } from "openai";
-import { costPerImageUsd, imageModel, imageProvider, parseDataUrl, type Provider } from "./config";
+import { availableProviders, costPerImageUsd, imageModel, imageProvider, parseDataUrl, type Provider } from "./config";
 import type { RefImage } from "@/lib/prompt";
 
 export interface ImageJob {
@@ -26,19 +26,20 @@ export class ProviderError extends Error {
   }
 }
 
-export function activeProvider(): { provider: Provider; model: string } {
-  const provider = imageProvider();
+/** The engine to use: the one the user picked if it's configured, else the default. */
+export function activeProvider(requested?: Provider): { provider: Provider; model: string } {
+  const provider = requested && availableProviders().includes(requested) ? requested : imageProvider();
   if (!provider) {
     throw new ProviderError(
-      "Image generation isn't configured yet. Set GEMINI_API_KEY (recommended) or OPENAI_API_KEY on the server.",
+      "Image generation isn't configured yet. Set OPENAI_API_KEY or GEMINI_API_KEY on the server.",
       503,
     );
   }
   return { provider, model: imageModel(provider) };
 }
 
-export async function generateImages(job: ImageJob): Promise<ImageResult> {
-  const { provider, model } = activeProvider();
+export async function generateImages(job: ImageJob, requested?: Provider): Promise<ImageResult> {
+  const { provider, model } = activeProvider(requested);
   const images = provider === "openai" ? await viaOpenAI(job, model) : await viaGemini(job, model);
   return { images, provider, model, estimatedCostUsd: +(images.length * costPerImageUsd(provider)).toFixed(3) };
 }

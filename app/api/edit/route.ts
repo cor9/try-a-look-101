@@ -15,6 +15,7 @@ const Body = z.object({
   actorPhoto: dataUrl.optional(),
   garmentImage: dataUrl.optional(),
   instruction: z.string().trim().min(3, "Tell us what to change.").max(400),
+  engine: z.enum(["openai", "gemini"]).optional(),
 });
 
 export async function POST(req: Request) {
@@ -31,11 +32,11 @@ export async function POST(req: Request) {
 
   const { prompt, images } = buildEditPrompt(parsed.data);
   try {
-    const { provider } = activeProvider();
+    const { provider } = activeProvider(parsed.data.engine);
     const usage = await reserveGeneration(req, 1, costPerImageUsd(provider));
     if (!usage.ok) return jsonError(usage.message!, 429, { retryAfterSeconds: usage.retryAfterSeconds });
 
-    const result = await generateImages({ prompt, images, variations: 1 });
+    const result = await generateImages({ prompt, images, variations: 1 }, provider);
     await recordSpend({ route: "edit", provider: result.provider, model: result.model, images: result.images.length, usd: result.estimatedCostUsd });
     return Response.json(result satisfies ImageResponse);
   } catch (err) {

@@ -3,14 +3,20 @@ import type { AppConfig } from "@/lib/types";
 
 export type Provider = "openai" | "gemini";
 
+/** Image engines that have a key configured. */
+export function availableProviders(): Provider[] {
+  const out: Provider[] = [];
+  if (process.env.OPENAI_API_KEY) out.push("openai");
+  if (process.env.GEMINI_API_KEY) out.push("gemini");
+  return out;
+}
+
+/** The default image engine: IMAGE_PROVIDER if set, otherwise OpenAI (best at keeping a real face), then Gemini. */
 export function imageProvider(): Provider | null {
-  const explicit = process.env.IMAGE_PROVIDER?.toLowerCase();
-  if (explicit === "gemini") return process.env.GEMINI_API_KEY ? "gemini" : null;
-  if (explicit === "openai") return process.env.OPENAI_API_KEY ? "openai" : null;
-  // Gemini first: it takes more reference images and is cheaper per preview.
-  if (process.env.GEMINI_API_KEY) return "gemini";
-  if (process.env.OPENAI_API_KEY) return "openai";
-  return null;
+  const available = availableProviders();
+  const explicit = process.env.IMAGE_PROVIDER?.toLowerCase() as Provider | undefined;
+  if (explicit && available.includes(explicit)) return explicit;
+  return available[0] ?? null;
 }
 
 export function imageModel(provider: Provider): string {
@@ -63,6 +69,7 @@ export function appConfig(): AppConfig {
   return {
     imageProvider: provider,
     imageModel: provider ? imageModel(provider) : null,
+    imageProviders: availableProviders(),
     scannerEnabled: scannerEnabled(),
     accessCodeRequired: Boolean(process.env.ACCESS_CODE),
     limits: { perHour, perDay },

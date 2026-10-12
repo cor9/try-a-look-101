@@ -5,7 +5,7 @@ import type { AppConfig, Consent, ImageResponse, Project, Render } from "@/lib/t
 import { ApiError, fetchConfig } from "@/lib/client/api";
 import { blobIdsFor, blobUrl, db, removeBlobs } from "@/lib/client/db";
 import { lookSummary, newProject } from "@/lib/client/factory";
-import { buildGenerateRequest, requestEdit, requestGenerate } from "@/lib/client/generate";
+import { buildGenerateRequest, requestEdit, requestGenerate, type Engine } from "@/lib/client/generate";
 import { dataUrlToBlob, normalizePhoto } from "@/lib/client/images";
 import { uid } from "@/lib/client/id";
 
@@ -42,6 +42,9 @@ interface Store {
   dismissJob: (id: string) => void;
   toasts: Toast[];
   toast: (message: string, tone?: Toast["tone"]) => void;
+  /** Image engine the user picked (null = server default). */
+  engine: Engine | null;
+  setEngine: (e: Engine) => void;
   needsAccessCode: boolean;
   setNeedsAccessCode: (v: boolean) => void;
 }
@@ -64,6 +67,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [needsAccessCode, setNeedsAccessCode] = useState(false);
+  const [engine, setEngineState] = useState<Engine | null>(null);
+  const engineRef = useRef<Engine | null>(null);
+  const setEngine = useCallback((e: Engine) => {
+    engineRef.current = e;
+    setEngineState(e);
+    try {
+      localStorage.setItem("tryalook.engine", e);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    if (!config) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("tryalook.engine");
+    } catch {
+      /* ignore */
+    }
+    const pick = config.imageProviders.find((p) => p === saved) ?? config.imageProvider;
+    engineRef.current = pick;
+    setEngineState(pick);
+  }, [config]);
 
   useEffect(() => {
     (async () => {
@@ -211,7 +237,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       for (let i = 0; i < count; i++) {
         runJob({ projectId: p.id, lookId, kind: "generate", label: look.title }, async () => {
-          const body = await buildGenerateRequest(p, look);
+          const body = { ...(await buildGenerateRequest(p, look)), engine: engineRef.current ?? undefined };
           const res = await requestGenerate(body);
           await addRender(p.id, lookId, res, { kind: "generate" });
         });
@@ -227,7 +253,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const render = look?.renders.find((r) => r.id === renderId);
       if (!p || !look || !render) return;
       runJob({ projectId: p.id, lookId, kind: "edit", label: instruction }, async () => {
-        const res = await requestEdit({ project: p, renderImageId: render.imageId, instruction, garmentPhotoId });
+        const res = await requestEdit({ project: p, renderImageId: render.imageId, instruction, garmentPhotoId, engine: engineRef.current ?? undefined });
         await addRender(p.id, lookId, res, {
           kind: "edit",
           instruction,
@@ -256,10 +282,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       dismissJob: (id) => setJobs((j) => j.filter((x) => x.id !== id)),
       toasts,
       toast,
+      engine,
+      setEngine,
       needsAccessCode,
       setNeedsAccessCode,
     }),
-    [ready, config, projects, currentId, selectProject, createProject, updateProject, deleteProject, wipeEverything, jobs, generate, edit, toasts, toast, needsAccessCode],
+    [ready, config, projects, currentId, selectProject, createProject, updateProject, deleteProject, wipeEverything, jobs, generate, edit, toasts, toast, engine, setEngine, needsAccessCode],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

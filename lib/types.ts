@@ -218,6 +218,7 @@ export interface GenerateRequest {
     garments: GenerateGarment[];
   };
   variations: number;
+  engine?: "openai" | "gemini";
 }
 
 export interface EditRequest {
@@ -228,6 +229,7 @@ export interface EditRequest {
   instruction: string;
   /** Optional garment photo the instruction refers to ("swap the jacket for this one"). */
   garmentImage?: string;
+  engine?: "openai" | "gemini";
 }
 
 export interface ImageResponse {
@@ -250,6 +252,8 @@ export interface ScannedItem {
 export interface AppConfig {
   imageProvider: "openai" | "gemini" | null;
   imageModel: string | null;
+  /** Every engine with a key configured; the user can pick between them. */
+  imageProviders: ("openai" | "gemini")[];
   scannerEnabled: boolean;
   accessCodeRequired: boolean;
   limits: { perHour: number; perDay: number };

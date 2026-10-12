@@ -165,7 +165,7 @@ function SetupBanner() {
       <Icon name="shield" />
       <div>
         <b>Image generation isn&apos;t switched on yet.</b> You can set up profiles, wardrobe and looks now. To make previews,
-        the site owner needs to add <code>GEMINI_API_KEY</code> (recommended) or <code>OPENAI_API_KEY</code> to the server
+        the site owner needs to add <code>OPENAI_API_KEY</code> or <code>GEMINI_API_KEY</code> to the server
         environment — see the README.
       </div>
     </div>
