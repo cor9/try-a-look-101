@@ -1,11 +1,12 @@
 import "server-only";
 import OpenAI, { toFile } from "openai";
 import { costPerImageUsd, imageModel, imageProvider, parseDataUrl, type Provider } from "./config";
+import type { RefImage } from "@/lib/prompt";
 
 export interface ImageJob {
   prompt: string;
-  /** data: URLs, in the order the prompt refers to them. */
-  images: string[];
+  /** Labeled data: URLs, in the order the prompt refers to them. */
+  images: RefImage[];
   variations: number;
 }
 
@@ -45,7 +46,7 @@ export async function generateImages(job: ImageJob): Promise<ImageResult> {
 async function viaOpenAI(job: ImageJob, model: string): Promise<string[]> {
   const client = new OpenAI();
   const files = await Promise.all(
-    job.images.map((url, i) => {
+    job.images.map(({ url }, i) => {
       const parsed = parseDataUrl(url);
       if (!parsed) throw new ProviderError("Invalid reference image.", 400);
       const ext = parsed.mime.split("/")[1];
@@ -57,7 +58,8 @@ async function viaOpenAI(job: ImageJob, model: string): Promise<string[]> {
     const res = await client.images.edit({
       model,
       image: files,
-      prompt: job.prompt,
+      // Files can't carry captions, so the role of each image goes at the top of the prompt.
+      prompt: `Reference images, in order:\n${job.images.map((im) => `- ${im.label}`).join("\n")}\n\n${job.prompt}`,
       n: job.variations,
       size: "1024x1536",
       quality: "medium",
@@ -92,10 +94,10 @@ interface GeminiPart {
 async function viaGemini(job: ImageJob, model: string): Promise<string[]> {
   const key = process.env.GEMINI_API_KEY!;
   const parts: GeminiPart[] = [];
-  job.images.forEach((url, i) => {
+  job.images.forEach(({ url, label }) => {
     const parsed = parseDataUrl(url);
     if (!parsed) throw new ProviderError("Invalid reference image.", 400);
-    parts.push({ text: `Reference image ${i + 1}:` });
+    parts.push({ text: label });
     parts.push({ inlineData: { mimeType: parsed.mime, data: parsed.data } });
   });
   parts.push({ text: job.prompt });

@@ -219,6 +219,7 @@ export const COLOR_SWATCHES: { name: string; hex: string }[] = [
 ];
 
 export const QUICK_EDITS = [
+  "Make the face match the actor's real photo exactly",
   "Remove the outer layer",
   "Change the base layer to forest green",
   "Make the smile warmer and more natural",
