@@ -1,0 +1,32 @@
+{
+  "name": "try-a-look",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Try A Look — AI wardrobe previews for headshot sessions (tryalook.childactor101.com)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "heic2any": "^0.0.4",
+    "jspdf": "^4.2.1",
+    "next": "^16.4.0",
+    "openai": "^7.32.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "5.9"
+  }
+}
