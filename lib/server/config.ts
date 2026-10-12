@@ -25,8 +25,20 @@ export function costPerImageUsd(provider: Provider): number {
   return provider === "openai" ? 0.17 : 0.14;
 }
 
+export type ScanProvider = "anthropic" | "gemini";
+
+/** Which model reads wardrobe photos: Claude when configured, otherwise Gemini's text/vision model. */
+export function scanProvider(): ScanProvider | null {
+  const explicit = process.env.SCAN_PROVIDER?.toLowerCase();
+  if (explicit === "anthropic") return process.env.ANTHROPIC_API_KEY ? "anthropic" : null;
+  if (explicit === "gemini") return process.env.GEMINI_API_KEY ? "gemini" : null;
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (process.env.GEMINI_API_KEY) return "gemini";
+  return null;
+}
+
 export function scannerEnabled(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+  return scanProvider() !== null;
 }
 
 export function intEnv(name: string, fallback: number): number {
@@ -39,6 +51,9 @@ export function limits() {
     perHour: intEnv("RATE_LIMIT_PER_HOUR", 20),
     perDay: intEnv("RATE_LIMIT_PER_DAY", 60),
     dailyBudgetUsd: Number(process.env.DAILY_BUDGET_USD) > 0 ? Number(process.env.DAILY_BUDGET_USD) : 25,
+    // Photo scans are cheap and come in batches (a whole album), so they get their own allowance.
+    scansPerHour: intEnv("SCAN_LIMIT_PER_HOUR", 150),
+    scansPerDay: intEnv("SCAN_LIMIT_PER_DAY", 400),
   };
 }
 
