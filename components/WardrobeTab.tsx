@@ -2,18 +2,18 @@
 
 import { useState } from "react";
 import { useStore } from "./store";
-import { BlobImage, Icon, Modal, PhotoDrop, Spinner, Swatch, confirmAction } from "./ui";
+import { BlobImage, Icon, Modal, PhotoDrop, Swatch, confirmAction } from "./ui";
+import { ImportDialog } from "./ImportDialog";
 import { COLOR_SWATCHES } from "@/lib/presets";
-import { CATEGORY_LABELS, type ClosetItem, type ItemCategory, type ScannedItem } from "@/lib/types";
+import { CATEGORY_LABELS, type ClosetItem, type ItemCategory } from "@/lib/types";
 import { db, removeBlobs } from "@/lib/client/db";
-import { blobToDataUrl, cropPhoto, normalizePhoto } from "@/lib/client/images";
-import { postJson } from "@/lib/client/api";
+import { normalizePhoto } from "@/lib/client/images";
 import { uid } from "@/lib/client/id";
 
 export function WardrobeTab({ onNext }: { onNext: () => void }) {
   const { project, update, config, toast } = useStore();
   const [editing, setEditing] = useState<ClosetItem | "new" | null>(null);
-  const [scanning, setScanning] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [filter, setFilter] = useState<ItemCategory | "all">("all");
   if (!project) return null;
   const items = project.closet.filter((c) => filter === "all" || c.category === filter);
@@ -38,17 +38,15 @@ export function WardrobeTab({ onNext }: { onNext: () => void }) {
           <span className="eyebrow">Step 2</span>
           <h1>Wardrobe inventory</h1>
           <p>
-            Snap the clothes you already own — one at a time, or the whole rack at once — or just describe them. Everything here can be hung on the rail in the Studio.
+            Import photos of the clothes you already own — an album, a folder or a .zip — or just describe them. Everything here can be hung on the rail in the Studio.
           </p>
         </div>
         <div className="row">
-          {config?.scannerEnabled && (
-            <button className="btn" onClick={() => setScanning(true)}>
-              <Icon name="scan" /> Scan a rack photo
-            </button>
-          )}
-          <button className="btn btn-primary" onClick={() => setEditing("new")}>
-            <Icon name="plus" /> Add an item
+          <button className="btn" onClick={() => setEditing("new")}>
+            <Icon name="plus" /> Add one item
+          </button>
+          <button className="btn btn-primary" onClick={() => setImporting(true)}>
+            <Icon name="upload" /> Import photos
           </button>
         </div>
       </div>
@@ -71,17 +69,15 @@ export function WardrobeTab({ onNext }: { onNext: () => void }) {
           <Icon name="hanger" size={34} />
           <h3>Your rail is empty</h3>
           <p className="muted small" style={{ maxWidth: 460, margin: "0 auto 16px" }}>
-            Lay clothes out on a bed or hang them on a door and take one photo
-            {config?.scannerEnabled ? " — we'll find each piece for you" : ""}. You can also skip this and describe outfits directly in the Studio.
+            Import a whole album, folder or .zip of clothing photos
+            {config?.scannerEnabled ? " — we'll fill in a card for every piece, even from a photo of the whole rack" : ""}. You can also skip this and describe outfits directly in the Studio.
           </p>
           <div className="row" style={{ justifyContent: "center" }}>
-            {config?.scannerEnabled && (
-              <button className="btn" onClick={() => setScanning(true)}>
-                <Icon name="scan" /> Scan a rack photo
-              </button>
-            )}
-            <button className="btn btn-primary" onClick={() => setEditing("new")}>
-              <Icon name="plus" /> Add an item
+            <button className="btn btn-hot" onClick={() => setImporting(true)}>
+              <Icon name="upload" /> Import photos
+            </button>
+            <button className="btn" onClick={() => setEditing("new")}>
+              <Icon name="plus" /> Add one item
             </button>
             <button className="btn btn-ghost" onClick={onNext}>
               Skip to Studio →
@@ -134,7 +130,7 @@ export function WardrobeTab({ onNext }: { onNext: () => void }) {
       )}
 
       {editing && <ItemEditor item={editing === "new" ? null : editing} onClose={() => setEditing(null)} />}
-      {scanning && <ScanDialog onClose={() => setScanning(false)} />}
+      {importing && <ImportDialog onClose={() => setImporting(false)} />}
     </div>
   );
 }
@@ -276,127 +272,6 @@ export function ItemEditor({
           <input type="checkbox" checked={Boolean(draft.useSourcePhoto)} onChange={(e) => setDraft({ ...draft, useSourcePhoto: e.target.checked })} />
           <span>Send the whole rack photo instead of the crop (use if the crop cut off part of the item)</span>
         </label>
-      )}
-    </Modal>
-  );
-}
-
-interface ScanRow extends ScannedItem {
-  key: string;
-  cropUrl: string;
-  cropBlob: Blob;
-  on: boolean;
-}
-
-function ScanDialog({ onClose }: { onClose: () => void }) {
-  const { update, toast } = useStore();
-  const [stage, setStage] = useState<"pick" | "scanning" | "review">("pick");
-  const [source, setSource] = useState<Blob | null>(null);
-  const [rows, setRows] = useState<ScanRow[]>([]);
-  const [error, setError] = useState("");
-
-  const scan = async (files: File[]) => {
-    setError("");
-    setStage("scanning");
-    try {
-      const full = await normalizePhoto(files[0], 2048);
-      setSource(full);
-      const { items } = await postJson<{ items: ScannedItem[] }>("/api/scan-closet", {
-        photo: await blobToDataUrl(await normalizePhoto(full, 1536)),
-      });
-      if (!items.length) throw new Error("We couldn't spot any clothing in that photo. Try a brighter, closer shot.");
-      const next: ScanRow[] = [];
-      for (const it of items) {
-        const cropBlob = await cropPhoto(full, it.box);
-        next.push({ ...it, key: uid(), cropBlob, cropUrl: URL.createObjectURL(cropBlob), on: true });
-      }
-      setRows(next);
-      setStage("review");
-    } catch (err) {
-      setError((err as Error).message);
-      setStage("pick");
-    }
-  };
-
-  const save = async () => {
-    if (!source) return;
-    const chosen = rows.filter((r) => r.on);
-    const sourceId = uid("img");
-    await db.putBlob(sourceId, source);
-    const items: ClosetItem[] = [];
-    for (const r of chosen) {
-      const photoId = uid("img");
-      await db.putBlob(photoId, r.cropBlob);
-      items.push({
-        id: uid("item"),
-        name: r.name,
-        category: r.category,
-        colorName: r.colorName,
-        colorHex: r.colorHex,
-        description: r.description,
-        location: r.location,
-        photoId,
-        sourcePhotoId: sourceId,
-        createdAt: Date.now(),
-      });
-    }
-    update((p) => ({ ...p, closet: [...p.closet, ...items] }));
-    rows.forEach((r) => URL.revokeObjectURL(r.cropUrl));
-    toast(`Added ${items.length} item${items.length === 1 ? "" : "s"} to the wardrobe.`, "success");
-    onClose();
-  };
-
-  return (
-    <Modal
-      title="Scan a rack photo"
-      wide={stage === "review"}
-      onClose={onClose}
-      footer={
-        stage === "review" ? (
-          <>
-            <span className="small muted grow">Uncheck anything you don&apos;t want. You can fix names and colors later.</span>
-            <button className="btn btn-primary" onClick={save} disabled={!rows.some((r) => r.on)}>
-              Add {rows.filter((r) => r.on).length} to wardrobe
-            </button>
-          </>
-        ) : undefined
-      }
-    >
-      {stage === "pick" && (
-        <>
-          <p className="muted">
-            Hang or lay out the options for the shoot and take one well-lit photo. Our AI stylist will find each top, layer and accessory.
-          </p>
-          {error && <div className="notice notice-error">{error}</div>}
-          <PhotoDrop onFiles={scan} label="Choose the rack photo" hint="JPG, PNG or iPhone HEIC" />
-        </>
-      )}
-      {stage === "scanning" && (
-        <div className="stack" style={{ alignItems: "center", padding: 30 }}>
-          <Spinner />
-          <b>Finding each piece…</b>
-          <span className="small muted">This takes about 20–40 seconds.</span>
-        </div>
-      )}
-      {stage === "review" && (
-        <div className="scan-grid">
-          {rows.map((r) => (
-            <button key={r.key} className={`scan-item ${r.on ? "on" : ""}`} onClick={() => setRows(rows.map((x) => (x.key === r.key ? { ...x, on: !x.on } : x)))}>
-              <div className="item-thumb">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={r.cropUrl} alt={r.name} />
-              </div>
-              <div className="item-body">
-                <span className="row" style={{ gap: 6 }}>
-                  <input type="checkbox" readOnly checked={r.on} tabIndex={-1} />
-                  <Swatch hex={r.colorHex} label={r.colorName} size={14} />
-                  <b style={{ fontSize: 13 }}>{r.name}</b>
-                </span>
-                <span className="tiny muted">{CATEGORY_LABELS[r.category]}</span>
-              </div>
-            </button>
-          ))}
-        </div>
       )}
     </Modal>
   );

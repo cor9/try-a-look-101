@@ -17,7 +17,7 @@ Browser (Next.js client)                     Server (Next.js API routes on Verce
 • Projects, photos, previews in IndexedDB    POST /api/generate     → Gemini / OpenAI image edit
   (private to the device, never uploaded       (builds the prompt server-side from structured fields)
   for storage)                               POST /api/edit         → iterative edit of a preview
-• Photos resized + EXIF stripped before      POST /api/scan-closet  → Claude finds garments in a rack photo
+• Photos resized + EXIF stripped before      POST /api/scan-closet  → Claude (or Gemini) fills in wardrobe cards from a photo
   any request                                GET  /api/config       → which features are switched on
 • PDF plan built client-side (jsPDF)         • API keys live only in server env vars
                                              • Rate limits + daily budget (Upstash Redis or in-memory)
@@ -30,7 +30,7 @@ Browser (Next.js client)                     Server (Next.js API routes on Verce
 |---|---|---|
 | App + API | Next.js 16 (App Router) on Vercel | One repo, server routes for secrets, cheap to run |
 | Image model | **Gemini 3 Pro Image** (default) or OpenAI **gpt-image-2** | Both take several reference images and edit with them. Gemini accepts up to 14 refs and handles iterative edits well. Switch with `IMAGE_PROVIDER`. |
-| Rack-photo scanner | Claude (`claude-opus-5-5`, structured output) | Optional. Turns one photo of a clothing rack into inventory items with crops. |
+| Photo import scanner | Claude (`claude-opus-5-5`, structured output), or Gemini (`gemini-flash-latest`) when no Anthropic key is set | Bulk-imports an album, folder or .zip: each photo becomes one card, or several cropped cards when a photo shows a whole rack. Works without AI too (filename + color guess). |
 | Storage | Browser IndexedDB | Private by default; no server-side image storage to secure or purge |
 | Abuse/cost | Access code, per-IP hourly/daily limits, global daily $ budget | Upstash Redis for shared counters; falls back to per-instance memory |
 
@@ -57,7 +57,7 @@ With no image key set, the app runs in full but shows a banner, and the API retu
 1. **Import the repo** in Vercel (team *cor9's projects*) → Framework: Next.js (auto-detected).
 2. **Environment variables** (Project → Settings → Environment Variables):
    - `GEMINI_API_KEY` — from a **billing-enabled** Google AI Studio / Cloud project (see Privacy below). *or* `OPENAI_API_KEY`.
-   - `ANTHROPIC_API_KEY` — optional, enables “Scan a rack photo”.
+   - `ANTHROPIC_API_KEY` — optional; Claude reads imported wardrobe photos (Gemini is used otherwise).
    - `ACCESS_CODE` — recommended during early access.
    - `RATE_LIMIT_PER_HOUR`, `RATE_LIMIT_PER_DAY`, `DAILY_BUDGET_USD`, `RATE_LIMIT_SALT` — see `.env.example`.
 3. **Shared rate limits** (recommended): add the *Upstash Redis* integration from the Vercel Marketplace. It sets `KV_REST_API_URL` / `KV_REST_API_TOKEN`, which the app picks up automatically.
@@ -75,6 +75,8 @@ See [`.env.example`](.env.example). Highlights:
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | |
 | `ACCESS_CODE` | unset | Require a shared code to generate |
 | `RATE_LIMIT_PER_HOUR` / `_PER_DAY` | 20 / 60 | Previews per visitor (IP hashed with `RATE_LIMIT_SALT`) |
+| `SCAN_LIMIT_PER_HOUR` / `_PER_DAY` | 150 / 400 | Photo scans per visitor during import |
+| `SCAN_PROVIDER` | auto (Claude, then Gemini) | Force `anthropic` or `gemini` for photo scanning |
 | `DAILY_BUDGET_USD` | 25 | Hard stop for all generation per UTC day |
 | `GEMINI_API_BASE` | Google endpoint | For a proxy/gateway or local testing |
 
@@ -94,7 +96,7 @@ The in-app page is at `/privacy`. The short version:
 **Before launch, review provider data terms:**
 - *Gemini API:* use the **paid** tier. Google's terms allow content sent to the *unpaid* tier to be used to improve its products, which isn't acceptable for photos of minors. Check current retention and abuse-monitoring terms.
 - *OpenAI API:* API data isn't used for training by default. Inputs and outputs may be retained up to 30 days for abuse monitoring unless your org has zero-data-retention approval.
-- *Anthropic API* (scanner only): commercial API data isn't used for training by default. Check retention terms for your org.
+- *Anthropic API* (photo import scanner): commercial API data isn't used for training by default. Check retention terms for your org.
 
 ---
 
@@ -102,7 +104,7 @@ The in-app page is at `/privacy`. The short version:
 
 **Phase 1 — shipped here:** actor profile + photo, casting types (incl. custom), 4-slot layered wardrobe builder (text, ideas, photos, inventory), color/neckline/fabric/fit/background controls, AI previews with identity preservation, iterative plain-English edits, versions, favorites, rename, compare, look board, session planner with reordering + notes + packing checklist, PDF export, consent + deletion, rate limits + budget cap.
 
-**Phase 1 also includes these Phase 2 pieces:** wardrobe inventory with rack-photo scanning, PDF export.
+**Phase 1 also includes these Phase 2 pieces:** wardrobe inventory with bulk photo import (album, folder, .zip, drag-and-drop; AI fills in each card), PDF export.
 
 **Next:** user accounts with encrypted cloud sync (e.g. Supabase Auth + private Storage buckets with signed URLs and an auto-delete retention policy), usage credits, async job queue if generation times grow, photographer accounts, Child Actor 101 integrations.
 

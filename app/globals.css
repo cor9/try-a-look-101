@@ -216,6 +216,25 @@ img { display: block; max-width: 100%; }
 .scan-item .item-thumb { aspect-ratio: 1; }
 .scan-item .item-body { padding: 8px 10px; font-size: 13px; }
 
+.import-progress { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; }
+.import-source { position: relative; width: 52px; height: 52px; flex: none; border-radius: 10px; overflow: hidden; background: var(--line); border: 2px solid transparent; }
+.import-source img, .import-source .img-placeholder { width: 100%; height: 100%; object-fit: cover; display: block; }
+.import-source.is-done, .import-source.is-fallback { border-color: var(--teal); }
+.import-source.is-error { border-color: var(--red); opacity: 0.6; }
+.import-source.is-empty { opacity: 0.55; }
+.import-state { position: absolute; right: 3px; bottom: 3px; width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,0.95); display: grid; place-items: center; font-size: 12px; color: var(--teal); box-shadow: var(--shadow-sm); }
+.import-state .spinner { width: 11px; height: 11px; border-width: 2px; color: var(--blue); }
+.is-error .import-state { color: var(--red); }
+.import-keep { position: absolute; inset: auto 0 0 0; font-size: 9px; border: 0; background: var(--navy); color: #fff; padding: 2px 0; cursor: pointer; }
+.import-cards { max-height: 56vh; }
+.import-cards .scan-item { cursor: default; display: flex; flex-direction: column; }
+.import-cards .item-thumb { position: relative; }
+.import-check { position: absolute; top: 6px; left: 6px; width: 22px; height: 22px; border-radius: 6px; background: #fff; border: 1.5px solid var(--line-2); display: grid; place-items: center; color: #fff; }
+.scan-item.on .import-check { background: var(--teal); border-color: var(--teal); }
+.import-ai { position: absolute; top: 6px; right: 6px; font-size: 10px; font-weight: 700; background: rgba(29,39,71,0.8); color: #fff; border-radius: 99px; padding: 2px 7px; }
+.import-name { padding: 6px 8px; font-size: 13px; font-weight: 600; }
+.import-cat { padding: 4px 6px; font-size: 12px; }
+
 /* ---------- studio ---------- */
 .studio { display: grid; grid-template-columns: 220px minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
 .look-list { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 120px; }

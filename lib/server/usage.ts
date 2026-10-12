@@ -94,6 +94,23 @@ export async function reserveGeneration(req: Request, images: number, estimatedU
   return { ok: true };
 }
 
+/** Reserve one wardrobe-photo scan for this client (separate, larger allowance than previews). */
+export async function reserveScan(req: Request, estimatedUsd: number): Promise<UsageCheck> {
+  const { scansPerHour, scansPerDay, dailyBudgetUsd } = limits();
+  const who = hashIp(clientIp(req));
+  const spentToday = await get(`tal:spend:${day()}`);
+  if (spentToday + estimatedUsd > dailyBudgetUsd) {
+    return { ok: false, message: "Try A Look has hit today's AI budget. Please try again tomorrow.", retryAfterSeconds: 3600 };
+  }
+  if ((await incrBy(`tal:scan:h:${hour()}:${who}`, 1, 3600)) > scansPerHour) {
+    return { ok: false, message: `That's ${scansPerHour} photo scans this hour — the rest can be added in a bit.`, retryAfterSeconds: 900 };
+  }
+  if ((await incrBy(`tal:scan:d:${day()}:${who}`, 1, 86400)) > scansPerDay) {
+    return { ok: false, message: `That's the daily limit of ${scansPerDay} photo scans. Come back tomorrow!`, retryAfterSeconds: 3600 };
+  }
+  return { ok: true };
+}
+
 /** Record actual spend after a successful generation and log it for cost reporting. */
 export async function recordSpend(entry: { route: string; provider: string; model: string; images: number; usd: number }) {
   await incrBy(`tal:spend:${day()}`, entry.usd, 2 * 86400);
