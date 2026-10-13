@@ -5,6 +5,8 @@ import { db } from "./db";
 import { postJson } from "./api";
 import { toRequestDataUrl } from "./images";
 
+export type Engine = "openai" | "gemini";
+
 async function blobData(id: string | undefined, maxEdge: number): Promise<string | undefined> {
   if (!id) return undefined;
   const blob = await db.getBlob(id);
@@ -61,6 +63,7 @@ export async function requestEdit(opts: {
   renderImageId: string;
   instruction: string;
   garmentPhotoId?: string;
+  engine?: Engine;
   signal?: AbortSignal;
 }): Promise<ImageResponse> {
   const image = await blobData(opts.renderImageId, 1280);
@@ -70,6 +73,7 @@ export async function requestEdit(opts: {
     actorPhoto: await blobData(opts.project.actor.photoIds[0], 1024),
     garmentImage: await blobData(opts.garmentPhotoId, 896),
     instruction: opts.instruction,
+    engine: opts.engine,
   };
   return postJson<ImageResponse>("/api/edit", body, opts.signal);
 }

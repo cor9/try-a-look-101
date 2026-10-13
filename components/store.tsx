@@ -5,7 +5,7 @@ import type { AppConfig, Consent, ImageResponse, Project, Render } from "@/lib/t
 import { ApiError, fetchConfig } from "@/lib/client/api";
 import { blobIdsFor, blobUrl, db, removeBlobs } from "@/lib/client/db";
 import { lookSummary, newProject } from "@/lib/client/factory";
-import { buildGenerateRequest, requestEdit, requestGenerate } from "@/lib/client/generate";
+import { buildGenerateRequest, requestEdit, requestGenerate, type Engine } from "@/lib/client/generate";
 import { dataUrlToBlob, normalizePhoto } from "@/lib/client/images";
 import { uid } from "@/lib/client/id";
 
@@ -42,6 +42,12 @@ interface Store {
   dismissJob: (id: string) => void;
   toasts: Toast[];
   toast: (message: string, tone?: Toast["tone"]) => void;
+  /** Put the actor's real face back onto each preview (on by default). */
+  faceLock: boolean;
+  setFaceLock: (on: boolean) => void;
+  /** Image engine the user picked (null = server default). */
+  engine: Engine | null;
+  setEngine: (e: Engine) => void;
   needsAccessCode: boolean;
   setNeedsAccessCode: (v: boolean) => void;
 }
@@ -64,6 +70,51 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [needsAccessCode, setNeedsAccessCode] = useState(false);
+  const [faceLock, setFaceLockState] = useState(true);
+  const faceLockRef = useRef(true);
+  const setFaceLock = useCallback((on: boolean) => {
+    faceLockRef.current = on;
+    setFaceLockState(on);
+    try {
+      localStorage.setItem("tryalook.faceLock", on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("tryalook.faceLock");
+      if (saved === "0") {
+        faceLockRef.current = false;
+        setFaceLockState(false);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const [engine, setEngineState] = useState<Engine | null>(null);
+  const engineRef = useRef<Engine | null>(null);
+  const setEngine = useCallback((e: Engine) => {
+    engineRef.current = e;
+    setEngineState(e);
+    try {
+      localStorage.setItem("tryalook.engine", e);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    if (!config) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem("tryalook.engine");
+    } catch {
+      /* ignore */
+    }
+    const pick = config.imageProviders.find((p) => p === saved) ?? config.imageProvider;
+    engineRef.current = pick;
+    setEngineState(pick);
+  }, [config]);
 
   useEffect(() => {
     (async () => {
@@ -152,13 +203,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [commit, selectProject]);
 
   const addRender = useCallback(
-    async (projectId: string, lookId: string, res: ImageResponse, extra: Partial<Render>) => {
+    async (projectId: string, lookId: string, res: ImageResponse, extra: Partial<Render>, lock: boolean) => {
       const p = projectsRef.current.find((x) => x.id === projectId);
       const look = p?.looks.find((l) => l.id === lookId);
       if (!p || !look) return;
+      const sources = lock
+        ? (await Promise.all(p.actor.photoIds.map(async (id) => ({ id, blob: await db.getBlob(id) })))).filter(
+            (s): s is { id: string; blob: Blob } => Boolean(s.blob),
+          )
+        : [];
       const renders: Render[] = [];
       for (const url of res.images) {
-        const blob = await normalizePhoto(await dataUrlToBlob(url), 2048);
+        let blob = await normalizePhoto(await dataUrlToBlob(url), 2048);
+        let lockInfo: Pick<Render, "faceLocked" | "faceLockNote"> = {};
+        if (lock && sources.length) {
+          const { lockFace } = await import("@/lib/client/facelock");
+          const result = await lockFace(blob, sources);
+          blob = result.blob;
+          lockInfo = { faceLocked: result.locked, faceLockNote: result.reason };
+          if (!result.locked && result.reason) toast(`Face Lock skipped: ${result.reason}`);
+        }
         const imageId = uid("img");
         await db.putBlob(imageId, blob);
         await blobUrl(imageId);
@@ -170,6 +234,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           model: res.model,
           kind: "generate",
           summary: lookSummary(look),
+          ...lockInfo,
           ...extra,
         });
       }
@@ -181,7 +246,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ),
       }));
     },
-    [updateProject],
+    [updateProject, toast],
   );
 
   const runJob = useCallback(
@@ -211,9 +276,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       for (let i = 0; i < count; i++) {
         runJob({ projectId: p.id, lookId, kind: "generate", label: look.title }, async () => {
-          const body = await buildGenerateRequest(p, look);
+          const lock = faceLockRef.current;
+          const body = { ...(await buildGenerateRequest(p, look)), engine: engineRef.current ?? undefined, faceLock: lock };
           const res = await requestGenerate(body);
-          await addRender(p.id, lookId, res, { kind: "generate" });
+          await addRender(p.id, lookId, res, { kind: "generate" }, lock);
         });
       }
     },
@@ -227,13 +293,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const render = look?.renders.find((r) => r.id === renderId);
       if (!p || !look || !render) return;
       runJob({ projectId: p.id, lookId, kind: "edit", label: instruction }, async () => {
-        const res = await requestEdit({ project: p, renderImageId: render.imageId, instruction, garmentPhotoId });
-        await addRender(p.id, lookId, res, {
-          kind: "edit",
-          instruction,
-          parentId: render.id,
-          summary: `${render.summary} → ${instruction}`,
-        });
+        const res = await requestEdit({ project: p, renderImageId: render.imageId, instruction, garmentPhotoId, engine: engineRef.current ?? undefined });
+        await addRender(
+          p.id,
+          lookId,
+          res,
+          { kind: "edit", instruction, parentId: render.id, summary: `${render.summary} → ${instruction}` },
+          faceLockRef.current,
+        );
       });
     },
     [addRender, currentId, runJob],
@@ -256,10 +323,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       dismissJob: (id) => setJobs((j) => j.filter((x) => x.id !== id)),
       toasts,
       toast,
+      faceLock,
+      setFaceLock,
+      engine,
+      setEngine,
       needsAccessCode,
       setNeedsAccessCode,
     }),
-    [ready, config, projects, currentId, selectProject, createProject, updateProject, deleteProject, wipeEverything, jobs, generate, edit, toasts, toast, needsAccessCode],
+    [ready, config, projects, currentId, selectProject, createProject, updateProject, deleteProject, wipeEverything, jobs, generate, edit, toasts, toast, faceLock, setFaceLock, engine, setEngine, needsAccessCode],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -14,7 +14,7 @@ Every generated image is labeled as an **AI wardrobe simulation**.
 ```
 Browser (Next.js client)                     Server (Next.js API routes on Vercel)
 ───────────────────────────                  ─────────────────────────────────────
-• Projects, photos, previews in IndexedDB    POST /api/generate     → Gemini / OpenAI image edit
+• Projects, photos, previews in IndexedDB    POST /api/generate     → OpenAI / Gemini image edit
   (private to the device, never uploaded       (builds the prompt server-side from structured fields)
   for storage)                               POST /api/edit         → iterative edit of a preview
 • Photos resized + EXIF stripped before      POST /api/scan-closet  → Claude (or Gemini) fills in wardrobe cards from a photo
@@ -29,7 +29,7 @@ Browser (Next.js client)                     Server (Next.js API routes on Verce
 | Piece | Choice | Why |
 |---|---|---|
 | App + API | Next.js 16 (App Router) on Vercel | One repo, server routes for secrets, cheap to run |
-| Image model | **Gemini 3 Pro Image** (default) or OpenAI **gpt-image-2** | Both take several reference images and edit with them. Gemini accepts up to 14 refs and handles iterative edits well. Switch with `IMAGE_PROVIDER`. |
+| Image model | OpenAI **gpt-image-2** (default) or **Gemini 3 Pro Image** | Both edit the actor's photo using labeled reference images. OpenAI recommends gpt-image-2 for identity-sensitive edits, so it's the default when both keys are set. When both are configured, users can switch engines per preview in the Studio. `IMAGE_PROVIDER` sets the default. |
 | Photo import scanner | Claude (`claude-opus-5-5`, structured output), or Gemini (`gemini-flash-latest`) when no Anthropic key is set | Bulk-imports an album, folder or .zip: each photo becomes one card, or several cropped cards when a photo shows a whole rack. Works without AI too (filename + color guess). |
 | Storage | Browser IndexedDB | Private by default; no server-side image storage to secure or purge |
 | Abuse/cost | Access code, per-IP hourly/daily limits, global daily $ budget | Upstash Redis for shared counters; falls back to per-instance memory |
@@ -70,7 +70,7 @@ See [`.env.example`](.env.example). Highlights:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `IMAGE_PROVIDER` | auto (Gemini if its key is set, else OpenAI) | Force `gemini` or `openai` |
+| `IMAGE_PROVIDER` | auto (OpenAI if its key is set, else Gemini) | Default engine: `openai` or `gemini`. Users can still switch in the Studio when both keys are set. |
 | `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image` | Override if Google renames or you want Flash (`gemini-3.1-flash-image`) |
 | `OPENAI_IMAGE_MODEL` | `gpt-image-2` | |
 | `ACCESS_CODE` | unset | Require a shared code to generate |

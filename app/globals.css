@@ -310,6 +310,10 @@ img { display: block; max-width: 100%; }
 .generate-card .muted { color: #b8c0dc; }
 .generate-card .select { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); color: #fff; padding: 8px 10px; width: auto; }
 .generate-card .select option { color: var(--ink); }
+.facelock-toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; color: #dfe4f5; }
+.facelock-toggle input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--orange); flex: none; }
+.facelock-toggle b { color: #fff; }
+.facelock-badge { position: absolute; top: 12px; left: 132px; display: inline-flex; align-items: center; gap: 4px; background: rgba(15, 110, 120, 0.9); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; padding: 4px 9px; border-radius: 99px; }
 .style-panel summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; color: var(--navy); list-style: none; display: flex; justify-content: space-between; align-items: center; }
 .style-panel summary::-webkit-details-marker { display: none; }
 .style-panel[open] summary { margin-bottom: 12px; }

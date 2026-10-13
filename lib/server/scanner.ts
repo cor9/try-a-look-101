@@ -61,7 +61,8 @@ List every distinct wearable item that could appear in a chest-up headshot: tops
 Skip hangers, furniture, backdrops, people's bodies and anything that is not clothing. Skip pants, skirts and shoes — they don't show in a headshot.
 If the photo has no headshot-relevant clothing, return an empty list.
 Name colors the way a stylist would. Be specific in descriptions about fabric and texture (ribbed knit, waffle, corduroy, cable knit, crochet) because an image model will recreate the garment from your words plus a crop.
-Bounding boxes should cover the visible part of each item; overlapping boxes are fine. For a photo of a single garment the box is usually most of the image.`;
+Bounding boxes should cover the visible part of each item; overlapping boxes are fine. For a photo of a single garment the box is usually most of the image.
+When a person or mannequin is wearing a garment, box the garment only — start the box below the chin so it never includes a face or head (except for hats, glasses and headbands, which should be boxed tightly around the item itself).`;
 
 const RawItems = z.object({
   items: z

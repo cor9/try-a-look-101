@@ -347,8 +347,10 @@ async function cardsFromScan(sourceKey: string, full: Blob, items: ScannedItem[]
   const single = items.length === 1;
   const out: Card[] = [];
   for (const it of items) {
-    // One piece in the photo: keep the whole photo. Several: cut each one out.
-    const photo = single ? await normalizePhoto(full, 1024) : await cropPhoto(full, it.box);
+    // One piece filling the photo: keep the whole photo. Otherwise cut it out — this also trims
+    // away a model's face when the garment photo shows someone wearing it.
+    const fillsPhoto = it.box.width * it.box.height >= 0.8;
+    const photo = single && fillsPhoto ? await normalizePhoto(full, 1024) : await cropPhoto(full, it.box, single ? 0.03 : 0.06);
     out.push({
       key: uid("card"),
       sourceKey,

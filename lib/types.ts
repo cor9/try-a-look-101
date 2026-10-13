@@ -94,6 +94,10 @@ export interface Render {
   parentId?: string;
   /** Outfit summary at the time the image was made. */
   summary: string;
+  /** True when Face Lock put the actor's real face onto this preview. */
+  faceLocked?: boolean;
+  /** Why Face Lock couldn't run, when it was on. */
+  faceLockNote?: string;
 }
 
 export type Framing = "tight" | "chest" | "waist";
@@ -218,6 +222,9 @@ export interface GenerateRequest {
     garments: GenerateGarment[];
   };
   variations: number;
+  engine?: "openai" | "gemini";
+  /** Face Lock is on: ask the model to keep the photo's expression and head angle so the real face fits. */
+  faceLock?: boolean;
 }
 
 export interface EditRequest {
@@ -228,6 +235,7 @@ export interface EditRequest {
   instruction: string;
   /** Optional garment photo the instruction refers to ("swap the jacket for this one"). */
   garmentImage?: string;
+  engine?: "openai" | "gemini";
 }
 
 export interface ImageResponse {
@@ -250,6 +258,8 @@ export interface ScannedItem {
 export interface AppConfig {
   imageProvider: "openai" | "gemini" | null;
   imageModel: string | null;
+  /** Every engine with a key configured; the user can pick between them. */
+  imageProviders: ("openai" | "gemini")[];
   scannerEnabled: boolean;
   accessCodeRequired: boolean;
   limits: { perHour: number; perDay: number };

@@ -1,11 +1,12 @@
 import "server-only";
 import OpenAI, { toFile } from "openai";
-import { costPerImageUsd, imageModel, imageProvider, parseDataUrl, type Provider } from "./config";
+import { availableProviders, costPerImageUsd, imageModel, imageProvider, parseDataUrl, type Provider } from "./config";
+import type { RefImage } from "@/lib/prompt";
 
 export interface ImageJob {
   prompt: string;
-  /** data: URLs, in the order the prompt refers to them. */
-  images: string[];
+  /** Labeled data: URLs, in the order the prompt refers to them. */
+  images: RefImage[];
   variations: number;
 }
 
@@ -25,19 +26,20 @@ export class ProviderError extends Error {
   }
 }
 
-export function activeProvider(): { provider: Provider; model: string } {
-  const provider = imageProvider();
+/** The engine to use: the one the user picked if it's configured, else the default. */
+export function activeProvider(requested?: Provider): { provider: Provider; model: string } {
+  const provider = requested && availableProviders().includes(requested) ? requested : imageProvider();
   if (!provider) {
     throw new ProviderError(
-      "Image generation isn't configured yet. Set GEMINI_API_KEY (recommended) or OPENAI_API_KEY on the server.",
+      "Image generation isn't configured yet. Set OPENAI_API_KEY or GEMINI_API_KEY on the server.",
       503,
     );
   }
   return { provider, model: imageModel(provider) };
 }
 
-export async function generateImages(job: ImageJob): Promise<ImageResult> {
-  const { provider, model } = activeProvider();
+export async function generateImages(job: ImageJob, requested?: Provider): Promise<ImageResult> {
+  const { provider, model } = activeProvider(requested);
   const images = provider === "openai" ? await viaOpenAI(job, model) : await viaGemini(job, model);
   return { images, provider, model, estimatedCostUsd: +(images.length * costPerImageUsd(provider)).toFixed(3) };
 }
@@ -45,7 +47,7 @@ export async function generateImages(job: ImageJob): Promise<ImageResult> {
 async function viaOpenAI(job: ImageJob, model: string): Promise<string[]> {
   const client = new OpenAI();
   const files = await Promise.all(
-    job.images.map((url, i) => {
+    job.images.map(({ url }, i) => {
       const parsed = parseDataUrl(url);
       if (!parsed) throw new ProviderError("Invalid reference image.", 400);
       const ext = parsed.mime.split("/")[1];
@@ -57,7 +59,8 @@ async function viaOpenAI(job: ImageJob, model: string): Promise<string[]> {
     const res = await client.images.edit({
       model,
       image: files,
-      prompt: job.prompt,
+      // Files can't carry captions, so the role of each image goes at the top of the prompt.
+      prompt: `Reference images, in order:\n${job.images.map((im) => `- ${im.label}`).join("\n")}\n\n${job.prompt}`,
       n: job.variations,
       size: "1024x1536",
       quality: "medium",
@@ -92,10 +95,10 @@ interface GeminiPart {
 async function viaGemini(job: ImageJob, model: string): Promise<string[]> {
   const key = process.env.GEMINI_API_KEY!;
   const parts: GeminiPart[] = [];
-  job.images.forEach((url, i) => {
+  job.images.forEach(({ url, label }) => {
     const parsed = parseDataUrl(url);
     if (!parsed) throw new ProviderError("Invalid reference image.", 400);
-    parts.push({ text: `Reference image ${i + 1}:` });
+    parts.push({ text: label });
     parts.push({ inlineData: { mimeType: parsed.mime, data: parsed.data } });
   });
   parts.push({ text: job.prompt });

@@ -32,6 +32,7 @@ import {
   type Project,
 } from "@/lib/types";
 import { emptySlot, newLook, slotFromItem } from "@/lib/client/factory";
+import type { Engine } from "@/lib/client/generate";
 import { db, removeBlobs } from "@/lib/client/db";
 import { downloadBlob, stampSimulation } from "@/lib/client/images";
 
@@ -39,6 +40,9 @@ import { downloadBlob, stampSimulation } from "@/lib/client/images";
 function showMirror() {
   document.querySelector(".mirror")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+const ENGINE_LABELS: Record<Engine, string> = { openai: "OpenAI", gemini: "Gemini" };
+const ENGINE_SHORT: Record<string, string> = { openai: "OAI", gemini: "Gem" };
 
 const ROLE_ADD: Record<LayerRole, string> = {
   base: "a base layer",
@@ -226,6 +230,11 @@ function Mirror({ project, look }: { project: Project; look: Look }) {
           <>
             <BlobImage key={render.id} id={render.imageId} alt={`AI wardrobe preview: ${render.summary}`} />
             <AiBadge />
+            {render.faceLocked && (
+              <span className="facelock-badge" title="Face Lock put the actor's real face from their photo onto this preview">
+                <Icon name="check" size={12} /> Real face
+              </span>
+            )}
             <div className="mirror-actions">
               <button className={`icon-btn ${look.favorite ? "on" : ""}`} onClick={() => setLook((l) => ({ ...l, favorite: !l.favorite }))} aria-label="Favorite look" aria-pressed={look.favorite}>
                 <Icon name="star" />
@@ -281,9 +290,11 @@ function Mirror({ project, look }: { project: Project; look: Look }) {
       {(look.renders.length > 1 || running.length > 0) && (
         <div className="versions" aria-label="Versions">
           {look.renders.map((r, i) => (
-            <button key={r.id} className={`version ${r.id === render?.id ? "on" : ""}`} onClick={() => setLook((l) => ({ ...l, selectedRenderId: r.id }))} title={r.instruction ?? r.summary}>
+            <button key={r.id} className={`version ${r.id === render?.id ? "on" : ""}`} onClick={() => setLook((l) => ({ ...l, selectedRenderId: r.id }))} title={`${r.instruction ?? r.summary} — made with ${ENGINE_LABELS[r.provider as Engine] ?? r.provider}`}>
               <BlobImage id={r.imageId} alt={`Version ${i + 1}`} />
-              <span className="vtag">{r.kind === "edit" ? "✎ edit" : `v${i + 1}`}</span>
+              <span className="vtag">
+                {r.kind === "edit" ? "✎" : `v${i + 1} ·`} {ENGINE_SHORT[r.provider] ?? r.provider}
+              </span>
             </button>
           ))}
           {running.map((j) => (
@@ -388,7 +399,7 @@ function EditBar({
 // ---------------------------------------------------------------- rail
 
 function RailColumn({ project, look }: { project: Project; look: Look }) {
-  const { update, generate, config, jobs, toast } = useStore();
+  const { update, generate, config, jobs, toast, engine, setEngine, faceLock, setFaceLock } = useStore();
   const [openSlot, setOpenSlot] = useState<string | null>(look.layers[0]?.id ?? null);
   const [variations, setVariations] = useState(1);
   const type = findCastingType(look.castingType, project.customCastingTypes);
@@ -484,6 +495,19 @@ function RailColumn({ project, look }: { project: Project; look: Look }) {
       <div className="generate-card">
         <div className="row-between">
           <b style={{ fontFamily: "var(--font-display)" }}>Preview this look</b>
+          <span className="row" style={{ gap: 10 }}>
+          {(config?.imageProviders.length ?? 0) > 1 && (
+            <label className="row small" style={{ gap: 6 }} title="Try both and keep whichever looks most like your actor">
+              <span className="muted">Engine</span>
+              <select className="select" value={engine ?? ""} onChange={(e) => setEngine(e.target.value as Engine)}>
+                {config!.imageProviders.map((p) => (
+                  <option key={p} value={p}>
+                    {ENGINE_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="row small" style={{ gap: 6 }}>
             <span className="muted">Versions</span>
             <select className="select" value={variations} onChange={(e) => setVariations(Number(e.target.value))}>
@@ -491,7 +515,14 @@ function RailColumn({ project, look }: { project: Project; look: Look }) {
               <option value={2}>2</option>
             </select>
           </label>
+          </span>
         </div>
+        <label className="facelock-toggle" title="After the AI dresses the look, put the actor's real face from their photo back on.">
+          <input type="checkbox" checked={faceLock} onChange={(e) => setFaceLock(e.target.checked)} />
+          <span>
+            <b>Face Lock</b> — keep {project.actor.name || "the actor"}&apos;s real face from their photo
+          </span>
+        </label>
         <button
           className="btn btn-hot"
           disabled={!canGenerate}
@@ -662,6 +693,7 @@ function Combo({ label, value, options, onChange }: { label: string; value: stri
 }
 
 function StylePanel({ look, setLook }: { look: Look; setLook: (fn: (l: Look) => Look) => void }) {
+  const { faceLock } = useStore();
   const b = look.backdrop;
   return (
     <details className="card card-tight style-panel">
@@ -699,7 +731,8 @@ function StylePanel({ look, setLook }: { look: Look; setLook: (fn: (l: Look) => 
         </label>
         <label className="field">
           <span>Expression</span>
-          <select className="select" value={look.expression} onChange={(e) => setLook((l) => ({ ...l, expression: e.target.value }))}>
+          {faceLock && <span className="tiny muted">Face Lock is on, so the expression comes from the actor&apos;s photo. Pick a photo with the expression you want on the Actor step.</span>}
+          <select className="select" disabled={faceLock} value={look.expression} onChange={(e) => setLook((l) => ({ ...l, expression: e.target.value }))}>
             {Array.from(new Set([look.expression, ...EXPRESSION_OPTIONS])).map((s) => (
               <option key={s}>{s}</option>
             ))}

@@ -39,6 +39,8 @@ const Body = z.object({
       .max(8),
   }),
   variations: z.number().int().min(1).max(2).default(1),
+  engine: z.enum(["openai", "gemini"]).optional(),
+  faceLock: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {
@@ -63,11 +65,11 @@ export async function POST(req: Request) {
   if (images.length > 10) return jsonError("Too many reference photos in one look — use 10 or fewer.");
 
   try {
-    const { provider } = activeProvider();
+    const { provider } = activeProvider(body.engine);
     const usage = await reserveGeneration(req, body.variations, body.variations * costPerImageUsd(provider));
     if (!usage.ok) return jsonError(usage.message!, 429, { retryAfterSeconds: usage.retryAfterSeconds });
 
-    const result = await generateImages({ prompt, images, variations: body.variations });
+    const result = await generateImages({ prompt, images, variations: body.variations }, provider);
     await recordSpend({ route: "generate", provider: result.provider, model: result.model, images: result.images.length, usd: result.estimatedCostUsd });
     return Response.json(result satisfies ImageResponse);
   } catch (err) {
