@@ -40,6 +40,7 @@ const Body = z.object({
   }),
   variations: z.number().int().min(1).max(2).default(1),
   engine: z.enum(["openai", "gemini"]).optional(),
+  faceLock: z.boolean().optional(),
 });
 
 export async function POST(req: Request) {

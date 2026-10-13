@@ -2,9 +2,11 @@
   "name": "try-a-look",
   "version": "0.1.0",
   "private": true,
-  "description": "Try A Look — AI wardrobe previews for headshot sessions (tryalook.childactor101.com)",
+  "description": "Try A Look \u2014 AI wardrobe previews for headshot sessions (tryalook.childactor101.com)",
   "scripts": {
+    "predev": "node scripts/copy-mediapipe.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-mediapipe.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit"
@@ -14,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
+    "@mediapipe/tasks-vision": "^1.1.0",
     "fflate": "^0.8.3",
     "heic2any": "^0.0.4",
     "jspdf": "^4.2.1",

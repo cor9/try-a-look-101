@@ -230,6 +230,11 @@ function Mirror({ project, look }: { project: Project; look: Look }) {
           <>
             <BlobImage key={render.id} id={render.imageId} alt={`AI wardrobe preview: ${render.summary}`} />
             <AiBadge />
+            {render.faceLocked && (
+              <span className="facelock-badge" title="Face Lock put the actor's real face from their photo onto this preview">
+                <Icon name="check" size={12} /> Real face
+              </span>
+            )}
             <div className="mirror-actions">
               <button className={`icon-btn ${look.favorite ? "on" : ""}`} onClick={() => setLook((l) => ({ ...l, favorite: !l.favorite }))} aria-label="Favorite look" aria-pressed={look.favorite}>
                 <Icon name="star" />
@@ -394,7 +399,7 @@ function EditBar({
 // ---------------------------------------------------------------- rail
 
 function RailColumn({ project, look }: { project: Project; look: Look }) {
-  const { update, generate, config, jobs, toast, engine, setEngine } = useStore();
+  const { update, generate, config, jobs, toast, engine, setEngine, faceLock, setFaceLock } = useStore();
   const [openSlot, setOpenSlot] = useState<string | null>(look.layers[0]?.id ?? null);
   const [variations, setVariations] = useState(1);
   const type = findCastingType(look.castingType, project.customCastingTypes);
@@ -512,6 +517,12 @@ function RailColumn({ project, look }: { project: Project; look: Look }) {
           </label>
           </span>
         </div>
+        <label className="facelock-toggle" title="After the AI dresses the look, put the actor's real face from their photo back on.">
+          <input type="checkbox" checked={faceLock} onChange={(e) => setFaceLock(e.target.checked)} />
+          <span>
+            <b>Face Lock</b> — keep {project.actor.name || "the actor"}&apos;s real face from their photo
+          </span>
+        </label>
         <button
           className="btn btn-hot"
           disabled={!canGenerate}
@@ -682,6 +693,7 @@ function Combo({ label, value, options, onChange }: { label: string; value: stri
 }
 
 function StylePanel({ look, setLook }: { look: Look; setLook: (fn: (l: Look) => Look) => void }) {
+  const { faceLock } = useStore();
   const b = look.backdrop;
   return (
     <details className="card card-tight style-panel">
@@ -719,7 +731,8 @@ function StylePanel({ look, setLook }: { look: Look; setLook: (fn: (l: Look) => 
         </label>
         <label className="field">
           <span>Expression</span>
-          <select className="select" value={look.expression} onChange={(e) => setLook((l) => ({ ...l, expression: e.target.value }))}>
+          {faceLock && <span className="tiny muted">Face Lock is on, so the expression comes from the actor&apos;s photo. Pick a photo with the expression you want on the Actor step.</span>}
+          <select className="select" disabled={faceLock} value={look.expression} onChange={(e) => setLook((l) => ({ ...l, expression: e.target.value }))}>
             {Array.from(new Set([look.expression, ...EXPRESSION_OPTIONS])).map((s) => (
               <option key={s}>{s}</option>
             ))}

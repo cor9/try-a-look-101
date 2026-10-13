@@ -124,7 +124,9 @@ export function buildImagePrompt(req: GenerateRequest): { prompt: string; images
     wardrobe,
     "",
     hair,
-    `Expression: ${req.look.expression || "keep the same expression as in image 1"}.`,
+    req.faceLock
+      ? "Expression and head angle: keep exactly the same facial expression, head tilt and face angle as in image 1."
+      : `Expression: ${req.look.expression || "keep the same expression as in image 1"}.`,
     `Framing: ${FRAMING_TEXT[req.look.framing] ?? FRAMING_TEXT.chest}. Facing the camera, shoulders slightly angled.`,
     `Background: ${b.style || "seamless studio backdrop"} in ${b.colorName || "medium gray"} (${b.colorHex || "#9aa0a6"}), softly out of focus.`,
     STYLE_RULES,
